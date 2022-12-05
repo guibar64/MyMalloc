@@ -86,6 +86,17 @@ void test_first_fit() {
   my_cleanup();
 }
 
+void test_realloc() {
+  char *string1 = (char *)my_malloc(5);
+  char *string2 = (char *)my_malloc(10);
+  char *string1_r = my_realloc(string1, 6);
+  CU_ASSERT_PTR_EQUAL(string1, string1_r);
+  char *string1_r2 = my_realloc(string1_r, 300);
+  CU_ASSERT_PTR_NOT_EQUAL(string1_r, string1_r2);
+  my_free(string2);
+  my_cleanup();
+}
+
 #define TEST_NB_THREADS 4
 #define TEST_NB_ALLOCS 10
 
@@ -145,7 +156,8 @@ int main(int argc, char *argv[]) {
       (NULL == CU_ADD_TEST(pSuites, test_merge_free)) ||
       (NULL == CU_ADD_TEST(pSuites, test_threaded)) ||
       (NULL == CU_ADD_TEST(pSuites, test_too_huge_alloc)) ||
-      (NULL == CU_ADD_TEST(pSuites, test_first_fit))) {
+      (NULL == CU_ADD_TEST(pSuites, test_first_fit)) ||
+      (NULL == CU_ADD_TEST(pSuites, test_realloc))) {
     CU_cleanup_registry();
     return CU_get_error();
   }

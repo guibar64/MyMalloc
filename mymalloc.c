@@ -128,7 +128,15 @@ void my_free(void *pointer) {
   lock_release(free_list_lock);
 }
 
-void *my_realloc(void *pointer, size_t new_size) { return pointer; }
+void *my_realloc(void *pointer, size_t new_size) {
+  BlockHeader *block = (BlockHeader *)((char *)(pointer)-BLOCK_SIZE);
+  if (block->size >= new_size) {
+    return pointer;
+  } else {
+    my_free(pointer);
+    return my_malloc(new_size);
+  }
+}
 
 void heap_block_free(HeapHeader *heap) {
   size_t true_size = heap->size + HEAP_HEADER_SIZE;
