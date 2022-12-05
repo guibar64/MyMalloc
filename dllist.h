@@ -3,14 +3,9 @@
 
 #include <stddef.h>
 
-#include "lock.h"
-
 typedef struct DLLElement_ {
   size_t size;
   int flags;
-#ifndef MYMALLOC_NO_THREADING
-  Lock lock;
-#endif
   struct DLLElement_ *previous_in_mem;
   struct DLLElement_ *next, *previous;
 } DLLElement;

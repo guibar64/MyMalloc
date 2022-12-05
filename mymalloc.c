@@ -1,4 +1,5 @@
 #include "dllist.h"
+#include "lock.h"
 #include "page_alloc.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,9 +9,8 @@
 
 static DLList heap = {NULL, NULL};
 static DLList free_list = {NULL, NULL};
-#ifndef MYMALLOC_NO_THREADING
-static Lock global_lock = LOCK_INITIALIZER;
-#endif
+static Lock free_list_lock = LOCK_INITIALIZER;
+static Lock heap_list_lock = LOCK_INITIALIZER;
 
 static inline size_t fit_to_memalign(size_t size) {
   return (MEM_ALIGN * ((size + MEM_ALIGN - 1) / MEM_ALIGN));
@@ -28,7 +28,6 @@ static char *get_start(BlockHeader *block) {
 void block_init(BlockHeader *block, size_t size) {
   block->size = size;
   block->flags = 0;
-  lock_init(&block->lock);
   block->previous_in_mem = NULL;
 }
 
@@ -67,7 +66,9 @@ HeapHeader *get_new_heap_block(size_t size) {
     block->size = block_size - HEAP_HEADER_SIZE;
     block->next = NULL;
     block->previous = NULL;
+    lock_acquire(heap_list_lock);
     dllist_push(&heap, block);
+    lock_release(heap_list_lock);
     return block;
   } else {
     return NULL;
@@ -76,6 +77,7 @@ HeapHeader *get_new_heap_block(size_t size) {
 
 void *my_malloc(size_t size) {
   BlockHeader *block;
+  lock_acquire(free_list_lock);
   block = find_free_block(size);
   if (block == NULL) {
     HeapHeader *heap = get_new_heap_block(size);
@@ -91,6 +93,7 @@ void *my_malloc(size_t size) {
   split_block(block, size);
   dllist_remove(&free_list, block);
   block->flags |= MY_BLOCK_OCCUPIED;
+  lock_release(free_list_lock);
   return (void *)get_start(block);
 }
 
@@ -104,7 +107,7 @@ static BlockHeader *next_block_in_mem(BlockHeader *block) {
 
 void my_free(void *pointer) {
   BlockHeader *block = (BlockHeader *)((char *)(pointer)-BLOCK_SIZE);
-  lock_acquire(global_lock);
+  lock_acquire(free_list_lock);
   /* split_block puts block->previous and block->next */
   BlockHeader *block_next = next_block_in_mem(block);
   if (block->next == block_next && is_free(block_next)) {
@@ -121,7 +124,7 @@ void my_free(void *pointer) {
     block->flags &= ~MY_BLOCK_OCCUPIED;
     dllist_push(&free_list, block);
   }
-  lock_relase(global_lock);
+  lock_release(free_list_lock);
 }
 
 void *my_realloc(void *pointer, size_t new_size) { return pointer; }
@@ -136,6 +139,8 @@ void heap_block_free(HeapHeader *heap) {
 }
 
 void my_cleanup() {
+  lock_acquire(heap_list_lock);
   ddlist_clean(&heap, heap_block_free);
   my_init();
+  lock_release(heap_list_lock);
 }

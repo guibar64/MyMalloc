@@ -1,3 +1,4 @@
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -63,6 +64,43 @@ void test_merge_free() {
   my_cleanup();
 }
 
+#define TEST_NB_THREADS 4
+#define TEST_NB_ALLOCS 10
+
+void *thread_function(void *args) {
+  void **pointers = (void **)args;
+  for (int i = 0; i < TEST_NB_ALLOCS; i++) {
+    pointers[i] = my_malloc(8 + 2 * i);
+  }
+  return NULL;
+}
+
+void test_threaded() {
+  pthread_t threads[TEST_NB_THREADS];
+  void *pointers[TEST_NB_THREADS][TEST_NB_ALLOCS];
+  for (int i = 0; i < TEST_NB_THREADS; i++) {
+    CU_ASSERT_FATAL(
+        pthread_create(threads + i, NULL, thread_function, pointers[i]) == 0)
+  }
+  for (int i = 0; i < TEST_NB_THREADS; i++) {
+    CU_ASSERT_FATAL(pthread_join(threads[i], NULL) == 0);
+  }
+  for (int i = 0; i < TEST_NB_THREADS - 1; i++) {
+    for (int j = i + 1; j < TEST_NB_THREADS; j++) {
+      for (int k = 0; k < TEST_NB_ALLOCS; k++) {
+        CU_ASSERT(pointers[i][k] != NULL);
+        CU_ASSERT(pointers[i][k] != pointers[j][k]);
+      }
+    }
+  }
+  for (int i = 0; i < TEST_NB_THREADS; i++) {
+    for (int k = 0; k < TEST_NB_ALLOCS; k++) {
+      my_free(pointers[i][k]);
+    }
+  }
+  my_cleanup();
+}
+
 int init_suite(void) { return 0; }
 int clean_suite(void) { return 0; }
 
@@ -82,7 +120,8 @@ int main(int argc, char *argv[]) {
   if ((NULL == CU_ADD_TEST(pSuites, test_alloc)) ||
       (NULL == CU_ADD_TEST(pSuites, test_alloc_free)) ||
       (NULL == CU_ADD_TEST(pSuites, test_10_allocs)) ||
-      (NULL == CU_ADD_TEST(pSuites, test_merge_free))) {
+      (NULL == CU_ADD_TEST(pSuites, test_merge_free)) ||
+      (NULL == CU_ADD_TEST(pSuites, test_threaded))) {
     CU_cleanup_registry();
     return CU_get_error();
   }

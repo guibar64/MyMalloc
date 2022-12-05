@@ -14,7 +14,7 @@
 #define BLOCK_SIZE                                                             \
   (MEM_ALIGN * ((sizeof(BlockHeader) + MEM_ALIGN - 1) / MEM_ALIGN))
 
-enum { MY_BLOCK_OCCUPIED = 1 } MyBlockFlag;
+typedef enum { MY_BLOCK_OCCUPIED = 1 } MyBlockFlag;
 
 typedef DLLElement HeapHeader;
 typedef DLLElement BlockHeader;
