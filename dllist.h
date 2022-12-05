@@ -18,6 +18,8 @@ DLList dllist_new();
 
 void dllist_push(DLList *list, DLLElement *element);
 
+void dllist_push_front(DLList *list, DLLElement *element);
+
 DLLElement *dllist_pop(DLList *list);
 
 size_t dllist_length(DLList *list);

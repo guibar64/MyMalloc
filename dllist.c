@@ -32,7 +32,7 @@ void dllist_push_front(DLList *list, DLLElement *element) {
     element->next = NULL;
     return;
   }
-  list->head->next = element;
+  list->head->previous = element;
   element->next = list->head;
   element->previous = NULL;
   list->head = element;

@@ -82,6 +82,7 @@ void *my_malloc(size_t size) {
   if (block == NULL) {
     HeapHeader *heap = get_new_heap_block(size);
     if (heap == NULL) {
+      lock_release(free_list_lock);
       return NULL;
     }
     block = (BlockHeader *)((char *)get_start(heap));
@@ -116,14 +117,14 @@ void my_free(void *pointer) {
   }
   if (block->previous_in_mem != NULL) {
     BlockHeader *next = next_block_in_mem(block->previous_in_mem);
-    if (next == block) {
+    if (next == block && is_free(block_next)) {
       block->previous_in_mem->size += block->size + BLOCK_SIZE;
+      lock_release(free_list_lock);
+      return;
     }
-    dllist_add_after(&free_list, block, block->previous_in_mem);
-  } else {
-    block->flags &= ~MY_BLOCK_OCCUPIED;
-    dllist_push(&free_list, block);
   }
+  block->flags &= ~MY_BLOCK_OCCUPIED;
+  dllist_push_front(&free_list, block);
   lock_release(free_list_lock);
 }
 

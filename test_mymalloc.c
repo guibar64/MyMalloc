@@ -1,4 +1,5 @@
 #include <pthread.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -64,6 +65,27 @@ void test_merge_free() {
   my_cleanup();
 }
 
+void test_too_huge_alloc() {
+#if INTPTR_MAX == INT64_MAX
+  CU_ASSERT(my_malloc(0x6FFFFFFFFFFF) == NULL);
+#endif
+  my_cleanup();
+}
+
+void test_first_fit() {
+  char *string1 = (char *)my_malloc(6);
+  char *string2 = (char *)my_malloc(18);
+  char *string3 = (char *)my_malloc(12);
+  char *string4 = (char *)my_malloc(30);
+  my_free(string3);
+  my_free(string1);
+  char *string5 = (char *)my_malloc(10);
+  CU_ASSERT_PTR_EQUAL(string5, string3);
+  my_free(string2);
+  my_free(string4);
+  my_cleanup();
+}
+
 #define TEST_NB_THREADS 4
 #define TEST_NB_ALLOCS 10
 
@@ -121,7 +143,9 @@ int main(int argc, char *argv[]) {
       (NULL == CU_ADD_TEST(pSuites, test_alloc_free)) ||
       (NULL == CU_ADD_TEST(pSuites, test_10_allocs)) ||
       (NULL == CU_ADD_TEST(pSuites, test_merge_free)) ||
-      (NULL == CU_ADD_TEST(pSuites, test_threaded))) {
+      (NULL == CU_ADD_TEST(pSuites, test_threaded)) ||
+      (NULL == CU_ADD_TEST(pSuites, test_too_huge_alloc)) ||
+      (NULL == CU_ADD_TEST(pSuites, test_first_fit))) {
     CU_cleanup_registry();
     return CU_get_error();
   }
