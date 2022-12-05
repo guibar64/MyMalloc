@@ -1,0 +1,13 @@
+*
+!**/
+!*.*
+*.exe
+*.dll
+*.so
+!Makefile
+venv
+__pycache__
+.pytest_cache
+build*/
+.vscode/
+*.bin
