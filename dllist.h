@@ -3,6 +3,9 @@
 
 #include <stddef.h>
 
+#define LIST_INITIALIZER                                                       \
+  { NULL, NULL }
+
 typedef struct DLLElement_ {
   size_t size;
   int flags;
