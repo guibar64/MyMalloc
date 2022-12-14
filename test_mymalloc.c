@@ -97,7 +97,7 @@ void test_realloc() {
   my_cleanup();
 }
 
-#define TEST_NB_THREADS 4
+#define TEST_NB_THREADS (2 * NUMBER_HEAPS)
 #define TEST_NB_ALLOCS 10
 
 void *thread_function(void *args) {

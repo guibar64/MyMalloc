@@ -9,6 +9,7 @@
 typedef struct DLLElement_ {
   size_t size;
   int flags;
+  int heap_index;
   struct DLLElement_ *previous_in_mem;
   struct DLLElement_ *next, *previous;
 } DLLElement;

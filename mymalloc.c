@@ -3,19 +3,12 @@
 #include "page_alloc.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "mymalloc.h"
 #include "mymalloc_internal.h"
 
-typedef struct {
-  DLList heap;
-  DLList free_list;
-  Lock lock;
-} Heap;
-
-#define NB_HEAPS 8
-
-static Heap heaps[NB_HEAPS] = {
+static Heap heaps[NUMBER_HEAPS] = {
     {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER},
     {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER},
     {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER},
@@ -29,12 +22,16 @@ static inline size_t fit_to_memalign(size_t size) {
   return (MEM_ALIGN * ((size + MEM_ALIGN - 1) / MEM_ALIGN));
 }
 
-void my_init() {
+void heap_init(heap_index) {
   Lock defaut = LOCK_INITIALIZER;
-  for (int i = 0; i < NB_HEAPS; i++) {
-    heaps[i].heap = dllist_new();
-    heaps[i].free_list = dllist_new();
-    heaps[i].lock = defaut;
+  heaps[heap_index].heap = dllist_new();
+  heaps[heap_index].free_list = dllist_new();
+  heaps[heap_index].lock = defaut;
+}
+
+void my_init() {
+  for (int i = 0; i < NUMBER_HEAPS; i++) {
+    heap_init(i);
   }
 }
 
@@ -80,7 +77,10 @@ HeapHeader *get_new_heap_block(Heap *heap, size_t size) {
   size_t block_size = min_size < PAGE_MIN_SIZE ? PAGE_MIN_SIZE : min_size;
   HeapHeader *block = (HeapHeader *)page_alloc(block_size);
   if (block != NULL) {
-    block->size = block_size - HEAP_HEADER_SIZE;
+    // In heap_free a check on next block in mem is made,
+    // so a last dead block is reserved to avoid invalid read
+    // TODO: find a better solution
+    block->size = block_size - HEAP_HEADER_SIZE - BLOCK_SIZE;
     block->next = NULL;
     block->previous = NULL;
     dllist_push(&heap->heap, block);
@@ -90,7 +90,8 @@ HeapHeader *get_new_heap_block(Heap *heap, size_t size) {
   }
 }
 
-static void *heap_malloc(Heap *heap, size_t size) {
+static void *heap_malloc(int heap_index, size_t size) {
+  Heap *heap = heaps + heap_index;
   BlockHeader *block;
   block = find_free_block(&heap->free_list, size);
   if (block == NULL) {
@@ -107,15 +108,31 @@ static void *heap_malloc(Heap *heap, size_t size) {
   split_block(&heap->free_list, block, size);
   dllist_remove(&heap->free_list, block);
   block->flags |= MY_BLOCK_OCCUPIED;
+  block->heap_index = heap_index;
   return (void *)get_start(block);
 }
 
 void *my_malloc(size_t size) {
-  void *mem;
-  lock_acquire(heaps[0].lock);
-  mem = heap_malloc(heaps + 0, size);
-  lock_release(heaps[0].lock);
-  return mem;
+  void *ret = NULL;
+  int found = 0;
+  int wait_time = 1;
+  while (1) {
+    for (int i = 0; i < NUMBER_HEAPS; i++) {
+      if (lock_try_acquire(heaps[i].lock) == 0) {
+        found = 1;
+        ret = heap_malloc(i, size);
+        lock_release(heaps[i].lock);
+        break;
+      }
+    }
+    if (!found) {
+      usleep(wait_time);
+      wait_time *= 2;
+    } else {
+      break;
+    }
+  }
+  return ret;
 }
 
 static int is_free(BlockHeader *block) {
@@ -146,9 +163,11 @@ static void heap_free(Heap *heap, void *pointer) {
 }
 
 void my_free(void *pointer) {
-  lock_acquire(heaps[0].lock);
+  BlockHeader *block = (BlockHeader *)((char *)(pointer)-BLOCK_SIZE);
+  int heap_index = block->heap_index;
+  lock_acquire(heaps[heap_index].lock);
   heap_free(heaps + 0, pointer);
-  lock_release(heaps[0].lock);
+  lock_release(heaps[heap_index].lock);
 }
 
 void *my_realloc(void *pointer, size_t new_size) {
@@ -162,7 +181,7 @@ void *my_realloc(void *pointer, size_t new_size) {
 }
 
 void heap_block_free(HeapHeader *heap) {
-  size_t true_size = heap->size + HEAP_HEADER_SIZE;
+  size_t true_size = heap->size + HEAP_HEADER_SIZE + BLOCK_SIZE;
   // printf("Dellaloc page %p \n", heap);
   if (!page_free(heap, true_size)) {
     fprintf(stderr, "ERROR: Cannot free page at %p of size %zd\n", heap,
@@ -171,10 +190,10 @@ void heap_block_free(HeapHeader *heap) {
 }
 
 void my_cleanup() {
-  for (int i = 0; i < NB_HEAPS; i++) {
+  for (int i = 0; i < NUMBER_HEAPS; i++) {
     lock_acquire(heaps[i].lock);
     ddlist_clean(&heaps[i].heap, heap_block_free);
-    my_init();
+    heap_init(i);
     lock_release(heaps[i].lock);
   }
 }

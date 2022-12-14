@@ -2,6 +2,7 @@
 #define MYMALLOC_INTERNAL_HEADER
 
 #include "dllist.h"
+#include "lock.h"
 
 #define MEM_ALIGN 8
 
@@ -14,9 +15,17 @@
 #define BLOCK_SIZE                                                             \
   (MEM_ALIGN * ((sizeof(BlockHeader) + MEM_ALIGN - 1) / MEM_ALIGN))
 
+#define NUMBER_HEAPS 8
+
 typedef enum { MY_BLOCK_OCCUPIED = 1 } MyBlockFlag;
 
 typedef DLLElement HeapHeader;
 typedef DLLElement BlockHeader;
+
+typedef struct {
+  DLList heap;
+  DLList free_list;
+  Lock lock;
+} Heap;
 
 #endif /*MYMALLOC_INTERNAL_HEADER*/
