@@ -11,6 +11,8 @@ typedef int Lock;
 
 #define lock_release(lock)
 
+#define lock_try_acquire(lock)
+
 #else
 #include <pthread.h>
 
@@ -21,6 +23,8 @@ typedef pthread_mutex_t Lock;
 #define lock_acquire(lock) (pthread_mutex_lock(&lock))
 
 #define lock_release(lock) (pthread_mutex_unlock(&lock))
+
+#define lock_try_acquire(lock) (pthread_mutex_trylock(&lock))
 
 #endif
 

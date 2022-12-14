@@ -10,21 +10,20 @@
 typedef struct {
   DLList heap;
   DLList free_list;
-  Lock free_list_lock;
-  Lock heap_list_lock;
+  Lock lock;
 } Heap;
 
 #define NB_HEAPS 8
 
 static Heap heaps[NB_HEAPS] = {
-    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER, LOCK_INITIALIZER},
-    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER, LOCK_INITIALIZER},
-    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER, LOCK_INITIALIZER},
-    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER, LOCK_INITIALIZER},
-    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER, LOCK_INITIALIZER},
-    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER, LOCK_INITIALIZER},
-    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER, LOCK_INITIALIZER},
-    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER, LOCK_INITIALIZER}};
+    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER},
+    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER},
+    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER},
+    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER},
+    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER},
+    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER},
+    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER},
+    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER}};
 
 static inline size_t fit_to_memalign(size_t size) {
   return (MEM_ALIGN * ((size + MEM_ALIGN - 1) / MEM_ALIGN));
@@ -35,8 +34,7 @@ void my_init() {
   for (int i = 0; i < NB_HEAPS; i++) {
     heaps[i].heap = dllist_new();
     heaps[i].free_list = dllist_new();
-    heaps[i].free_list_lock = defaut;
-    heaps[i].heap_list_lock = defaut;
+    heaps[i].lock = defaut;
   }
 }
 
@@ -85,9 +83,7 @@ HeapHeader *get_new_heap_block(Heap *heap, size_t size) {
     block->size = block_size - HEAP_HEADER_SIZE;
     block->next = NULL;
     block->previous = NULL;
-    lock_acquire(heap->heap_list_lock);
     dllist_push(&heap->heap, block);
-    lock_release(heap->heap_list_lock);
     return block;
   } else {
     return NULL;
@@ -96,12 +92,10 @@ HeapHeader *get_new_heap_block(Heap *heap, size_t size) {
 
 static void *heap_malloc(Heap *heap, size_t size) {
   BlockHeader *block;
-  lock_acquire(heap->free_list_lock);
   block = find_free_block(&heap->free_list, size);
   if (block == NULL) {
     HeapHeader *heap_block = get_new_heap_block(heap, size);
     if (heap_block == NULL) {
-      lock_release(heap->free_list_lock);
       return NULL;
     }
     block = (BlockHeader *)((char *)get_start(heap_block));
@@ -113,11 +107,16 @@ static void *heap_malloc(Heap *heap, size_t size) {
   split_block(&heap->free_list, block, size);
   dllist_remove(&heap->free_list, block);
   block->flags |= MY_BLOCK_OCCUPIED;
-  lock_release(heap->free_list_lock);
   return (void *)get_start(block);
 }
 
-void *my_malloc(size_t size) { return heap_malloc(heaps + 0, size); }
+void *my_malloc(size_t size) {
+  void *mem;
+  lock_acquire(heaps[0].lock);
+  mem = heap_malloc(heaps + 0, size);
+  lock_release(heaps[0].lock);
+  return mem;
+}
 
 static int is_free(BlockHeader *block) {
   return !(block->flags & MY_BLOCK_OCCUPIED);
@@ -129,7 +128,6 @@ static BlockHeader *next_block_in_mem(BlockHeader *block) {
 
 static void heap_free(Heap *heap, void *pointer) {
   BlockHeader *block = (BlockHeader *)((char *)(pointer)-BLOCK_SIZE);
-  lock_acquire(heap->free_list_lock);
   /* split_block puts block->previous and block->next */
   BlockHeader *block_next = next_block_in_mem(block);
   if (block->next == block_next && is_free(block_next)) {
@@ -140,16 +138,18 @@ static void heap_free(Heap *heap, void *pointer) {
     BlockHeader *next = next_block_in_mem(block->previous_in_mem);
     if (next == block && is_free(block_next)) {
       block->previous_in_mem->size += block->size + BLOCK_SIZE;
-      lock_release(heap->free_list_lock);
       return;
     }
   }
   block->flags &= ~MY_BLOCK_OCCUPIED;
   dllist_push_front(&heap->free_list, block);
-  lock_release(heap->free_list_lock);
 }
 
-void my_free(void *pointer) { return heap_free(heaps + 0, pointer); }
+void my_free(void *pointer) {
+  lock_acquire(heaps[0].lock);
+  heap_free(heaps + 0, pointer);
+  lock_release(heaps[0].lock);
+}
 
 void *my_realloc(void *pointer, size_t new_size) {
   BlockHeader *block = (BlockHeader *)((char *)(pointer)-BLOCK_SIZE);
@@ -172,9 +172,9 @@ void heap_block_free(HeapHeader *heap) {
 
 void my_cleanup() {
   for (int i = 0; i < NB_HEAPS; i++) {
-    lock_acquire(heaps[i].heap_list_lock);
+    lock_acquire(heaps[i].lock);
     ddlist_clean(&heaps[i].heap, heap_block_free);
     my_init();
-    lock_release(heaps[i].heap_list_lock);
+    lock_release(heaps[i].lock);
   }
 }
