@@ -100,15 +100,24 @@ void test_realloc() {
 #define TEST_NB_THREADS (2 * NUMBER_HEAPS)
 #define TEST_NB_ALLOCS 10
 
+size_t alloc_size_of_index(int i) { return (size_t)(8 + 2 * i); }
+
 void *thread_function(void *args) {
   void **pointers = (void **)args;
   for (int i = 0; i < TEST_NB_ALLOCS; i++) {
-    pointers[i] = my_malloc(8 + 2 * i);
+    size_t size = alloc_size_of_index(i);
+    pointers[i] = my_malloc(size);
+    char *string = (char *)(pointers[i]);
+    for (size_t i = 0; i < (size - 1); i++) {
+      string[i] = 33 + (rand() % (127 - 33));
+    }
+    string[size - 1] = '\0';
   }
   return NULL;
 }
 
 void test_threaded() {
+  srand(216478638);
   pthread_t threads[TEST_NB_THREADS];
   void *pointers[TEST_NB_THREADS][TEST_NB_ALLOCS];
   for (int i = 0; i < TEST_NB_THREADS; i++) {
@@ -119,10 +128,19 @@ void test_threaded() {
     CU_ASSERT_FATAL(pthread_join(threads[i], NULL) == 0);
   }
   for (int i = 0; i < TEST_NB_THREADS - 1; i++) {
+    for (int k = 0; k < TEST_NB_ALLOCS; k++) {
+      CU_ASSERT(pointers[i][k] != NULL);
+      BlockHeader *block =
+          (BlockHeader *)((char *)(pointers[i][k]) - BLOCK_SIZE);
+      CU_ASSERT(block->size >= alloc_size_of_index(k));
+    }
+  }
+
+  for (int i = 0; i < TEST_NB_THREADS - 1; i++) {
     for (int j = i + 1; j < TEST_NB_THREADS; j++) {
       for (int k = 0; k < TEST_NB_ALLOCS; k++) {
-        CU_ASSERT(pointers[i][k] != NULL);
         CU_ASSERT(pointers[i][k] != pointers[j][k]);
+        CU_ASSERT(strcmp(pointers[i][k], pointers[j][k]));
       }
     }
   }
