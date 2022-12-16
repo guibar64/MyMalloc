@@ -167,26 +167,35 @@ static void heap_free(Heap *heap, void *pointer) {
   BlockHeader *block_next = next_block_in_mem(block);
   if (block->next == block_next && is_free(block_next)) {
     block->size += block_next->size + BLOCK_SIZE;
+    lock_acquire(heap->lock);
     dllist_remove(&heap->free_list, block_next);
+    lock_release(heap->lock);
   }
   if (block->previous_in_mem != NULL) {
     BlockHeader *next = next_block_in_mem(block->previous_in_mem);
-    if (next == block && is_free(block_next)) {
-      block->previous_in_mem->size += block->size + BLOCK_SIZE;
-      return;
+    if (next == block) {
+      lock_acquire(heap->lock);
+      if (is_free(block_next)) {
+        block->previous_in_mem->size += block->size + BLOCK_SIZE;
+        lock_release(heap->lock);
+        return;
+      }
+      lock_release(heap->lock);
     }
   }
   block->flags &= ~MY_BLOCK_OCCUPIED;
+  lock_acquire(heap->lock);
   dllist_push_front(&heap->free_list, block);
+  lock_release(heap->lock);
 }
 
 void my_free(void *pointer) {
   init_thread_index();
   BlockHeader *block = (BlockHeader *)((char *)(pointer)-BLOCK_SIZE);
   int16_t heap_index = block->heap_index;
-  lock_acquire(heaps[heap_index].lock);
+  // lock_acquire(heaps[heap_index].lock);
   heap_free(heaps + heap_index, pointer);
-  lock_release(heaps[heap_index].lock);
+  // lock_release(heaps[heap_index].lock);
 }
 
 void *my_realloc(void *pointer, size_t new_size) {
