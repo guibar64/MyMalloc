@@ -22,7 +22,7 @@ static inline size_t fit_to_memalign(size_t size) {
   return (MEM_ALIGN * ((size + MEM_ALIGN - 1) / MEM_ALIGN));
 }
 
-void heap_init(heap_index) {
+void heap_init(int heap_index) {
   Lock defaut = LOCK_INITIALIZER;
   heaps[heap_index].heap = dllist_new();
   heaps[heap_index].free_list = dllist_new();
