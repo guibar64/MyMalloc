@@ -1,6 +1,7 @@
 #include "dllist.h"
 #include "lock.h"
 #include "page_alloc.h"
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -17,6 +18,9 @@ static Heap heaps[NUMBER_HEAPS] = {
     {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER},
     {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER},
     {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER}};
+
+_Thread_local int thread_index = -1;
+_Atomic int global_thread_count = 0;
 
 static inline size_t fit_to_memalign(size_t size) {
   return (MEM_ALIGN * ((size + MEM_ALIGN - 1) / MEM_ALIGN));
@@ -112,25 +116,35 @@ static void *heap_malloc(int heap_index, size_t size) {
   return (void *)get_start(block);
 }
 
+static int try_malloc_on_heap(int heap_index, size_t size,
+                              void **allocated_mem) {
+  *allocated_mem = NULL;
+  if (lock_try_acquire(heaps[heap_index].lock) == 0) {
+    *allocated_mem = heap_malloc(heap_index, size);
+    lock_release(heaps[heap_index].lock);
+    return 1;
+  }
+  return 0;
+}
+
 void *my_malloc(size_t size) {
+  if (thread_index == -1) {
+    thread_index = global_thread_count % NUMBER_HEAPS;
+    global_thread_count++;
+  }
   void *ret = NULL;
   int found = 0;
   int wait_time = 1;
   while (1) {
+    if (try_malloc_on_heap(thread_index, size, &ret))
+      return ret;
+
     for (int i = 0; i < NUMBER_HEAPS; i++) {
-      if (lock_try_acquire(heaps[i].lock) == 0) {
-        found = 1;
-        ret = heap_malloc(i, size);
-        lock_release(heaps[i].lock);
-        break;
-      }
+      if (try_malloc_on_heap(i, size, &ret))
+        return ret;
     }
-    if (!found) {
-      usleep(wait_time);
-      wait_time *= 2;
-    } else {
-      break;
-    }
+    usleep(wait_time);
+    wait_time *= 2;
   }
   return ret;
 }
