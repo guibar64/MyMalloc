@@ -102,7 +102,7 @@ void test_realloc() {
 
 size_t alloc_size_of_index(int i) { return (size_t)(8 + 2 * i); }
 
-void *thread_function(void *args) {
+void *thread_malloc(void *args) {
   void **pointers = (void **)args;
   for (int i = 0; i < TEST_NB_ALLOCS; i++) {
     size_t size = alloc_size_of_index(i);
@@ -116,13 +116,21 @@ void *thread_function(void *args) {
   return NULL;
 }
 
+void *thread_free(void *args) {
+  void **pointers = (void **)args;
+  for (int i = 0; i < TEST_NB_ALLOCS; i++) {
+    my_free(pointers[i]);
+  }
+  return NULL;
+}
+
 void test_threaded() {
   srand(216478638);
   pthread_t threads[TEST_NB_THREADS];
   void *pointers[TEST_NB_THREADS][TEST_NB_ALLOCS];
   for (int i = 0; i < TEST_NB_THREADS; i++) {
     CU_ASSERT_FATAL(
-        pthread_create(threads + i, NULL, thread_function, pointers[i]) == 0)
+        pthread_create(threads + i, NULL, thread_malloc, pointers[i]) == 0)
   }
   for (int i = 0; i < TEST_NB_THREADS; i++) {
     CU_ASSERT_FATAL(pthread_join(threads[i], NULL) == 0);
@@ -145,9 +153,11 @@ void test_threaded() {
     }
   }
   for (int i = 0; i < TEST_NB_THREADS; i++) {
-    for (int k = 0; k < TEST_NB_ALLOCS; k++) {
-      my_free(pointers[i][k]);
-    }
+    CU_ASSERT_FATAL(pthread_create(threads + TEST_NB_THREADS - 1 - i, NULL,
+                                   thread_free, pointers[i]) == 0)
+  }
+  for (int i = 0; i < TEST_NB_THREADS; i++) {
+    CU_ASSERT_FATAL(pthread_join(threads[i], NULL) == 0);
   }
   my_cleanup();
 }

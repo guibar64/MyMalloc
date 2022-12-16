@@ -127,11 +127,15 @@ static int try_malloc_on_heap(int16_t heap_index, size_t size,
   return 0;
 }
 
-void *my_malloc(size_t size) {
+static void init_thread_index() {
   if (thread_index == -1) {
     thread_index = global_thread_count % NUMBER_HEAPS;
     global_thread_count++;
   }
+}
+
+void *my_malloc(size_t size) {
+  init_thread_index();
   void *ret = NULL;
   int found = 0;
   int wait_time = 1;
@@ -177,10 +181,11 @@ static void heap_free(Heap *heap, void *pointer) {
 }
 
 void my_free(void *pointer) {
+  init_thread_index();
   BlockHeader *block = (BlockHeader *)((char *)(pointer)-BLOCK_SIZE);
   int16_t heap_index = block->heap_index;
   lock_acquire(heaps[heap_index].lock);
-  heap_free(heaps + 0, pointer);
+  heap_free(heaps + heap_index, pointer);
   lock_release(heaps[heap_index].lock);
 }
 
