@@ -2,14 +2,15 @@
 #define DLLIST_HEADER
 
 #include <stddef.h>
+#include <stdint.h>
 
 #define LIST_INITIALIZER                                                       \
   { NULL, NULL }
 
 typedef struct DLLElement_ {
   size_t size;
-  int flags;
-  int heap_index;
+  int8_t flags;
+  int16_t heap_index;
   struct DLLElement_ *previous_in_mem;
   struct DLLElement_ *next, *previous;
 } DLLElement;

@@ -19,14 +19,14 @@ static Heap heaps[NUMBER_HEAPS] = {
     {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER},
     {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER}};
 
-_Thread_local int thread_index = -1;
-_Atomic int global_thread_count = 0;
+_Thread_local int16_t thread_index = -1;
+_Atomic int16_t global_thread_count = 0;
 
 static inline size_t fit_to_memalign(size_t size) {
   return (MEM_ALIGN * ((size + MEM_ALIGN - 1) / MEM_ALIGN));
 }
 
-void heap_init(int heap_index) {
+void heap_init(int16_t heap_index) {
   Lock defaut = LOCK_INITIALIZER;
   heaps[heap_index].heap = dllist_new();
   heaps[heap_index].free_list = dllist_new();
@@ -34,7 +34,7 @@ void heap_init(int heap_index) {
 }
 
 void my_init() {
-  for (int i = 0; i < NUMBER_HEAPS; i++) {
+  for (int16_t i = 0; i < NUMBER_HEAPS; i++) {
     heap_init(i);
   }
 }
@@ -94,7 +94,7 @@ HeapHeader *get_new_heap_block(Heap *heap, size_t size) {
   }
 }
 
-static void *heap_malloc(int heap_index, size_t size) {
+static void *heap_malloc(int16_t heap_index, size_t size) {
   Heap *heap = heaps + heap_index;
   BlockHeader *block;
   block = find_free_block(&heap->free_list, size);
@@ -116,7 +116,7 @@ static void *heap_malloc(int heap_index, size_t size) {
   return (void *)get_start(block);
 }
 
-static int try_malloc_on_heap(int heap_index, size_t size,
+static int try_malloc_on_heap(int16_t heap_index, size_t size,
                               void **allocated_mem) {
   *allocated_mem = NULL;
   if (lock_try_acquire(heaps[heap_index].lock) == 0) {
@@ -139,7 +139,7 @@ void *my_malloc(size_t size) {
     if (try_malloc_on_heap(thread_index, size, &ret))
       return ret;
 
-    for (int i = 0; i < NUMBER_HEAPS; i++) {
+    for (int16_t i = 0; i < NUMBER_HEAPS; i++) {
       if (try_malloc_on_heap(i, size, &ret))
         return ret;
     }
@@ -178,7 +178,7 @@ static void heap_free(Heap *heap, void *pointer) {
 
 void my_free(void *pointer) {
   BlockHeader *block = (BlockHeader *)((char *)(pointer)-BLOCK_SIZE);
-  int heap_index = block->heap_index;
+  int16_t heap_index = block->heap_index;
   lock_acquire(heaps[heap_index].lock);
   heap_free(heaps + 0, pointer);
   lock_release(heaps[heap_index].lock);
@@ -204,7 +204,7 @@ void heap_block_free(HeapHeader *heap) {
 }
 
 void my_cleanup() {
-  for (int i = 0; i < NUMBER_HEAPS; i++) {
+  for (int16_t i = 0; i < NUMBER_HEAPS; i++) {
     lock_acquire(heaps[i].lock);
     ddlist_clean(&heaps[i].heap, heap_block_free);
     heap_init(i);
