@@ -17,6 +17,8 @@
 
 #define NUMBER_HEAPS 8
 
+#define LOG_FILE "my_malloc.log"
+
 typedef enum { MY_BLOCK_OCCUPIED = 1 } MyBlockFlag;
 
 typedef DLLElement HeapHeader;

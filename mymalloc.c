@@ -4,6 +4,7 @@
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "mymalloc.h"
@@ -130,23 +131,51 @@ static void init_thread_index() {
   }
 }
 
+static void log_allocation(void *ptr, size_t size) {
+  FILE *flog;
+  char datestr[32], timestr[32];
+  struct tm the_time;
+  if ((flog = fopen(LOG_FILE, "a")) != NULL) {
+    time_t raw_time = time(NULL);
+    localtime_r(&raw_time, &the_time);
+    strftime(datestr, 32, "%B %d %Y", &the_time);
+    strftime(timestr, 32, "%H:%M", &the_time);
+    lock_acquire(init_lock);
+    fprintf(flog, "[%s][%s] malloc'd %zu byte%s at address %p\n", datestr,
+            timestr, size, size <= 1 ? "" : "s", ptr);
+    fflush(flog);
+    lock_release(init_lock);
+    fclose(flog);
+  }
+}
+
 void *my_malloc(size_t size) {
   if (global_thread_count < 0)
     my_init();
   init_thread_index();
   void *ret = NULL;
   int wait_time = 1;
-  while (1) {
-    if (try_malloc_on_heap(thread_index, size, &ret))
-      return ret;
+  int found = 0;
+  while (!found) {
+    if (try_malloc_on_heap(thread_index, size, &ret)) {
+      found = 1;
+      break;
+    }
 
     for (int16_t i = 0; i < NUMBER_HEAPS; i++) {
-      if (try_malloc_on_heap(i, size, &ret))
-        return ret;
+      if (try_malloc_on_heap(i, size, &ret)) {
+        found = 1;
+        break;
+      }
     }
-    usleep(wait_time);
-    wait_time *= 2;
+    if (!found) {
+      usleep(wait_time);
+      wait_time *= 2;
+    }
   }
+  if (ret != NULL)
+    log_allocation(ret, size);
+
   return ret;
 }
 
