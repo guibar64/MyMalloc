@@ -9,34 +9,30 @@
 #include "mymalloc.h"
 #include "mymalloc_internal.h"
 
-static Heap heaps[NUMBER_HEAPS] = {
-    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER},
-    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER},
-    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER},
-    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER},
-    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER},
-    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER},
-    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER},
-    {LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER}};
+#define HEAP_INITIALIZER                                                       \
+  { LIST_INITIALIZER, LIST_INITIALIZER, LOCK_INITIALIZER }
+
+static Heap heaps[NUMBER_HEAPS];
 
 _Thread_local int16_t thread_index = -1;
-_Atomic int16_t global_thread_count = 0;
+_Atomic int16_t global_thread_count = -1;
+Lock init_lock = LOCK_INITIALIZER;
 
 static inline size_t fit_to_memalign(size_t size) {
   return (MEM_ALIGN * ((size + MEM_ALIGN - 1) / MEM_ALIGN));
 }
 
 void heap_init(int16_t heap_index) {
-  Lock defaut = LOCK_INITIALIZER;
-  heaps[heap_index].heap = dllist_new();
-  heaps[heap_index].free_list = dllist_new();
-  heaps[heap_index].lock = defaut;
+  heaps[heap_index] = (Heap)HEAP_INITIALIZER;
 }
 
 void my_init() {
+  lock_acquire(init_lock);
+  global_thread_count = 0;
   for (int16_t i = 0; i < NUMBER_HEAPS; i++) {
     heap_init(i);
   }
+  lock_release(init_lock);
 }
 
 static char *get_start(BlockHeader *block) {
@@ -135,9 +131,10 @@ static void init_thread_index() {
 }
 
 void *my_malloc(size_t size) {
+  if (global_thread_count < 0)
+    my_init();
   init_thread_index();
   void *ret = NULL;
-  int found = 0;
   int wait_time = 1;
   while (1) {
     if (try_malloc_on_heap(thread_index, size, &ret))
@@ -190,12 +187,12 @@ static void heap_free(Heap *heap, void *pointer) {
 }
 
 void my_free(void *pointer) {
+  if (global_thread_count < 0)
+    return;
   init_thread_index();
   BlockHeader *block = (BlockHeader *)((char *)(pointer)-BLOCK_SIZE);
   int16_t heap_index = block->heap_index;
-  // lock_acquire(heaps[heap_index].lock);
   heap_free(heaps + heap_index, pointer);
-  // lock_release(heaps[heap_index].lock);
 }
 
 void *my_realloc(void *pointer, size_t new_size) {
