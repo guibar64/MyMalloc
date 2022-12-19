@@ -3,6 +3,8 @@
 
 #ifdef MYMALLOC_NO_THREADING
 
+#define LOCK_INITIALIZER 0
+
 typedef int Lock;
 
 #define lock_init(lock)
@@ -11,7 +13,7 @@ typedef int Lock;
 
 #define lock_release(lock)
 
-#define lock_try_acquire(lock)
+#define lock_try_acquire(lock) 0
 
 #else
 #include <pthread.h>
