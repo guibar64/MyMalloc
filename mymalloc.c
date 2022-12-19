@@ -133,16 +133,15 @@ static void init_thread_index() {
 
 static void log_allocation(void *ptr, size_t size) {
   FILE *flog;
-  char datestr[32], timestr[32];
+  char datestr[64];
   struct tm the_time;
   if ((flog = fopen(LOG_FILE, "a")) != NULL) {
     time_t raw_time = time(NULL);
     localtime_r(&raw_time, &the_time);
-    strftime(datestr, 32, "%B %d %Y", &the_time);
-    strftime(timestr, 32, "%H:%M", &the_time);
+    strftime(datestr, 64, "[%B %d %Y][%H:%M]", &the_time);
     lock_acquire(init_lock);
-    fprintf(flog, "[%s][%s] malloc'd %zu byte%s at address %p\n", datestr,
-            timestr, size, size <= 1 ? "" : "s", ptr);
+    fprintf(flog, "%s malloc'd %zu byte%s at address %p\n", datestr, size,
+            size <= 1 ? "" : "s", ptr);
     fflush(flog);
     lock_release(init_lock);
     fclose(flog);
